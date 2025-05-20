@@ -1,23 +1,20 @@
-import os
-from dotenv import load_dotenv
 import discord
+from discord.ext import commands
+import config
 
-intents = discord.Intents.default()
-intents.message_content = True
+bot = commands.Bot(command_prefix=config.PREFIX, intents=config.INTENTS)
 
-client = discord.Client(intents=intents)
-
-@client.event
+@bot.event
 async def on_ready():
-    print(f'{client.user} is online.')
+    print(f'{bot.user} is online.')
 
-@client.event
+@bot.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author == bot.user:
         return
 
-    if message.content.startswith('.ping'):
+    if message.content.startswith(config.PREFIX+'ping'):
         await message.channel.send('pong')
 
-load_dotenv()
-client.run(os.getenv('DISCORD_BOT_KEY'))
+
+bot.run(config.TOKEN)
