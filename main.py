@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import config
+import asyncio
 
 bot = commands.Bot(command_prefix=config.PREFIX, intents=config.INTENTS)
 
@@ -8,13 +9,9 @@ bot = commands.Bot(command_prefix=config.PREFIX, intents=config.INTENTS)
 async def on_ready():
     print(f'{bot.user} is online.')
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
+async def go_cog_mode():
+    for cog in config.ACTIVE_COGS:
+        await bot.load_extension(f'cogs.{cog}') # load the Cog submodules
 
-    if message.content.startswith(config.PREFIX+'ping'):
-        await message.channel.send('pong')
-
-
+asyncio.run(go_cog_mode())
 bot.run(config.TOKEN)
