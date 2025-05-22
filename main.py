@@ -1,23 +1,17 @@
-import os
-from dotenv import load_dotenv
 import discord
+from discord.ext import commands
+import config
+import asyncio
 
-intents = discord.Intents.default()
-intents.message_content = True
+bot = commands.Bot(command_prefix=config.PREFIX, intents=config.INTENTS)
 
-client = discord.Client(intents=intents)
-
-@client.event
+@bot.event
 async def on_ready():
-    print(f'{client.user} is online.')
+    print(f'{bot.user} is online.')
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
+async def go_cog_mode():
+    for cog in config.ACTIVE_COGS:
+        await bot.load_extension(f'cogs.{cog}') # load the Cog submodules
 
-    if message.content.startswith('.ping'):
-        await message.channel.send('pong')
-
-load_dotenv()
-client.run(os.getenv('DISCORD_BOT_KEY'))
+asyncio.run(go_cog_mode())
+bot.run(config.TOKEN)
