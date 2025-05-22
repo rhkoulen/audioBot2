@@ -9,7 +9,7 @@ _base.message_content = True
 INTENTS = _base
 
 ACTIVE_COGS = [
-    'test'
+    'music'
 ]
 
 load_dotenv()
