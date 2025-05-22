@@ -47,7 +47,7 @@ class Music(commands.Cog):
         help='',
         brief='',
         usage='',
-        aliases=['leave, dc']
+        aliases=['leave', 'dc']
     )
     async def disconnect(self, ctx):
         if ctx.voice_client is None: # if the bot is not in a channel, disconnect has no use
