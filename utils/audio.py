@@ -1,10 +1,14 @@
 from yt_dlp import YoutubeDL
 from .validate import is_url
-from enum import Enum
 import os
 import asyncio
+from itertools import count
 
 MUSIC_CACHE = os.path.abspath('music_cache')
+GLOBAL_TOKEN_GEN = count(0)
+
+def get_token():
+    return next(GLOBAL_TOKEN_GEN) # I tried making my own, but this is clean and atomic. Shoutout itertools
 
 class SongQueueEntry:
     def __init__(self, title, uploader, filepath):
@@ -13,7 +17,8 @@ class SongQueueEntry:
         self.filepath = filepath # absolute path to the mp3 (should be in MUSIC_CACHE)
 
     def cleanup(self):
-        os.remove(self.filepath)
+        try: os.remove(self.filepath)
+        except FileNotFoundError: print('CRITICAL: cleanup just attempted to remove a file that was not found.')
 
 class SongQueue:
     def __init__(self):
@@ -66,22 +71,33 @@ class SongQueue:
             try: os.remove(os.path.join(MUSIC_CACHE, entry))
             except Exception: pass
 
+class GuildMusicState:
+    def __init__(self):
+        self.queue = SongQueue()
+        self.current_playback = None # should hold a SongQueueEntry
+        self.volume = 0.5
+
+
+
+
 async def download_from_query(query:str) -> SongQueueEntry:
     return await asyncio.to_thread(_download_wrapped, query)
 
 def _download_wrapped(query:str) -> SongQueueEntry:
+    # TODO: how can I speed up rate-limiting? is there a downloader option that lets me multi-connect? will my network card shit itself if I have too many connections?
     if not is_url(query):
         query = f'ytsearch1: {query}'
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': os.path.join(MUSIC_CACHE, '%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(MUSIC_CACHE, f'%(title)s_{get_token()}.%(ext)s'),
         'noplaylist': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'quiet': True, # suppresses stdout yapping
+        'quiet': True, # please be quiet
+        'no_warnings': True, # please be quiet
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(query, download=True)
