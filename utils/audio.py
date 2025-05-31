@@ -1,19 +1,29 @@
 from yt_dlp import YoutubeDL
 from .validate import is_url
-from enum import Enum
 import os
 import asyncio
+from itertools import count
 
 MUSIC_CACHE = os.path.abspath('music_cache')
+GLOBAL_TOKEN_GEN = count(0)
+MAX_TITLE_LENGTH = 128
+
+def get_token():
+    return next(GLOBAL_TOKEN_GEN) # I tried making my own, but this is clean and atomic. Shoutout itertools
 
 class SongQueueEntry:
-    def __init__(self, title, uploader, filepath):
+    def __init__(self, title, uploader, filepath, duration):
         self.title = title
         self.uploader = uploader
         self.filepath = filepath # absolute path to the mp3 (should be in MUSIC_CACHE)
+        self.duration = duration
+
+    def deep_copy(self):
+        return SongQueueEntry(self.title, self.uploader, self.filepath, self.duration)
 
     def cleanup(self):
-        os.remove(self.filepath)
+        try: os.remove(self.filepath)
+        except FileNotFoundError: print('CRITICAL: cleanup just attempted to remove a file that was not found.')
 
 class SongQueue:
     def __init__(self):
@@ -61,33 +71,48 @@ class SongQueue:
             self._queue.clear()
         for entry in queue_copy:
             entry.cleanup()
-        for entry in os.listdir(MUSIC_CACHE): # hopefully, nothing is ever dropped, but this will catch the slack
-            if entry == '.gitignore': continue
-            try: os.remove(os.path.join(MUSIC_CACHE, entry))
-            except Exception: pass
+
+    async def freeze(self):
+        """
+        Returns a deep copy of the queue entries for safe external use.
+        """
+        async with self._lock:
+            return [entry.deep_copy() for entry in self._queue]
+
+class GuildMusicState:
+    def __init__(self):
+        self.queue = SongQueue()
+        self.current_playback = None # should hold a SongQueueEntry
+        self.keep_playing_semaphore = True
+        self.volume = 0.5
+
+
 
 async def download_from_query(query:str) -> SongQueueEntry:
     return await asyncio.to_thread(_download_wrapped, query)
 
 def _download_wrapped(query:str) -> SongQueueEntry:
+    # TODO: how can I speed up rate-limiting? is there a downloader option that lets me multi-connect? will my network card shit itself if I have too many connections?
     if not is_url(query):
         query = f'ytsearch1: {query}'
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': os.path.join(MUSIC_CACHE, '%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(MUSIC_CACHE, f'%(title)s_{get_token()}.%(ext)s'),
         'noplaylist': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'quiet': True, # suppresses stdout yapping
+        'quiet': True, # please be quiet
+        'no_warnings': True, # please be quiet
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(query, download=True)
         if 'entries' in info: info = info['entries'][0] # snip off the first result
 
-        filename = os.path.splitext(ydl.prepare_filename(info))[0] + '.mp3' # apparently prepare_filename returns the intermediate extension in some submodules, instead of the requested mp3
-        title = info.get('title')
-        uploader = info.get('uploader')
-    return SongQueueEntry(title, uploader, filename)
+        filename = os.path.splitext(ydl.prepare_filename(info))[0] + '.mp3' # apparently prepare_filename returns the intermediate extension (e.g. wav) in some submodules, instead of the requested mp3
+        title = info.get('title', 'NO TITLE FOUND')[:MAX_TITLE_LENGTH]
+        uploader = info.get('uploader', 'NO UPLOADER FOUND')
+        duration = info.get('duration', -1)
+    return SongQueueEntry(title, uploader, filename, duration)
