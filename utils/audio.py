@@ -6,15 +6,20 @@ from itertools import count
 
 MUSIC_CACHE = os.path.abspath('music_cache')
 GLOBAL_TOKEN_GEN = count(0)
+MAX_TITLE_LENGTH = 128
 
 def get_token():
     return next(GLOBAL_TOKEN_GEN) # I tried making my own, but this is clean and atomic. Shoutout itertools
 
 class SongQueueEntry:
-    def __init__(self, title, uploader, filepath):
+    def __init__(self, title, uploader, filepath, duration):
         self.title = title
         self.uploader = uploader
         self.filepath = filepath # absolute path to the mp3 (should be in MUSIC_CACHE)
+        self.duration = duration
+
+    def deep_copy(self):
+        return SongQueueEntry(self.title, self.uploader, self.filepath, self.duration)
 
     def cleanup(self):
         try: os.remove(self.filepath)
@@ -66,17 +71,20 @@ class SongQueue:
             self._queue.clear()
         for entry in queue_copy:
             entry.cleanup()
-        for entry in os.listdir(MUSIC_CACHE): # hopefully, nothing is ever dropped, but this will catch the slack
-            if entry == '.gitignore': continue
-            try: os.remove(os.path.join(MUSIC_CACHE, entry))
-            except Exception: pass
+
+    async def freeze(self):
+        """
+        Returns a deep copy of the queue entries for safe external use.
+        """
+        async with self._lock:
+            return [entry.deep_copy() for entry in self._queue]
 
 class GuildMusicState:
     def __init__(self):
         self.queue = SongQueue()
         self.current_playback = None # should hold a SongQueueEntry
+        self.keep_playing_semaphore = True
         self.volume = 0.5
-
 
 
 
@@ -103,7 +111,8 @@ def _download_wrapped(query:str) -> SongQueueEntry:
         info = ydl.extract_info(query, download=True)
         if 'entries' in info: info = info['entries'][0] # snip off the first result
 
-        filename = os.path.splitext(ydl.prepare_filename(info))[0] + '.mp3' # apparently prepare_filename returns the intermediate extension in some submodules, instead of the requested mp3
-        title = info.get('title')
-        uploader = info.get('uploader')
-    return SongQueueEntry(title, uploader, filename)
+        filename = os.path.splitext(ydl.prepare_filename(info))[0] + '.mp3' # apparently prepare_filename returns the intermediate extension (e.g. wav) in some submodules, instead of the requested mp3
+        title = info.get('title', 'NO TITLE FOUND')[:MAX_TITLE_LENGTH]
+        uploader = info.get('uploader', 'NO UPLOADER FOUND')
+        duration = info.get('duration', -1)
+    return SongQueueEntry(title, uploader, filename, duration)

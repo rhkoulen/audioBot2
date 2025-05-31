@@ -1,5 +1,5 @@
 from discord.ext import commands
-from utils import audio
+from utils import audio, embeds
 
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
 
@@ -17,6 +17,7 @@ class Music(commands.Cog):
     def play_song(self, ctx, song:audio.SongQueueEntry):
         music_state = self.get_state(ctx.guild.id)
         music_state.current_playback = song
+        music_state.keep_playing_semaphore = True
         source = FFmpegPCMAudio(song.filepath, before_options='-nostdin', options='-vn -loglevel error')
         source = PCMVolumeTransformer(source, volume=music_state.volume)
         ctx.voice_client.play(source, after=self._after_playback(ctx))
@@ -55,7 +56,7 @@ class Music(commands.Cog):
             return
         else: # bot in a channel, leave the channel
             await ctx.send('Leaving the VC.')
-            await ctx.voice_client.disconnect()
+            await ctx.voice_client.disconnect() # TODO: this leaves a lot of stuff messy with the guild's music state if something is playing, make this graceful
             return
 
     @commands.command(
@@ -93,21 +94,36 @@ class Music(commands.Cog):
         aliases=['view', 'list']
     )
     async def queue(self, ctx):
-        # TODO: switch this to a fancy discord embed
-        # TODO: make some indication of whether the first item is playing or paused or neither
-        queue = self.get_state(ctx.guild.id).queue
-        message = 'Queue:\n'
-        songs = await queue.peek_all()
-        for i, item in enumerate(songs):
-            message += str(i+1) # NOTE: the user-facing queue is 1-indexed
-            message += '. '
-            message += item.title
-            message += '\n'
-        await ctx.send(message)
+        music_state = self.get_state(ctx.guild.id)
+        if await music_state.queue.length() == 0:
+            await ctx.send('Nothing in the queue bubby.')
+            return
+
+        song_list = await music_state.queue.freeze()
+        if not ctx.voice_client:
+            view = embeds.QueueEmbed(
+                ctx=ctx,
+                song_list=song_list,
+                current_song=None,
+                is_paused=False,
+                entries_per_page=10
+            )
+        else:
+            view = embeds.QueueEmbed(
+                ctx=ctx,
+                song_list=song_list,
+                current_song=music_state.current_playback,
+                is_paused=ctx.voice_client.is_paused(),
+                entries_per_page=10
+            )
+
+        embed = view.format_page(0)
+        await ctx.send(embed=embed, view=view)
+
 
     # Loopback commands
+    # this layout is chatGPT'd. I got close, but I couldn't figure out precisely how to use asyncio nonsense; turns out, discord.py has a thread creation native :/ thanks ig
     def _after_playback(self, ctx):
-        # this layout is chatGPT'd. I got close, but I couldn't figure out precisely how to use asyncio nonsense; turns out, discord.py has a thread creation native :/ thanks ig
         def callback(error):
             if error:
                 print(f"Error during playback: {error}")
@@ -118,8 +134,11 @@ class Music(commands.Cog):
         music_state = self.get_state(ctx.guild.id)
         finished_song = music_state.current_playback
         finished_song.cleanup()
+        music_state.current_playback = None
 
-        if await music_state.queue.length() == 0:
+        if not music_state.keep_playing_semaphore: # stop the playback if signalled to do so (e.g., on stop, purge, etc.)
+            return
+        elif await music_state.queue.length() == 0: # nothing to continue playing
             await ctx.send('Queue is now empty.')
             return
 
@@ -142,7 +161,7 @@ class Music(commands.Cog):
             await ctx.send('I\'m already playing something.')
             return
         elif ctx.voice_client.is_paused():
-            await ctx.send('The previous song was paused. Resuming.')
+            await ctx.send('The current song was paused. Resuming.')
             ctx.voice_client.resume()
             return
         elif await music_state.queue.length() == 0:
@@ -180,6 +199,29 @@ class Music(commands.Cog):
         usage='',
         aliases=[]
     )
+    async def stop(self, ctx):
+        if not ctx.voice_client:
+            await ctx.send('I\'m not in a VC.')
+            return
+        elif not ctx.voice_client.is_playing():
+            await ctx.send('I\'m not playing anything.')
+            return
+        elif ctx.voice_client.is_paused():
+            await ctx.send('I\'m already paused.')
+            ctx.voice_client.resume()
+            return
+
+        await ctx.send('Stopping playback.')
+        music_state = self.get_state(ctx.guild.id)
+        music_state.keep_playing_semaphore = False
+        ctx.voice_client.stop() # even though this triggers the `after` callback in the play loop, the semaphore makes sure playback stops
+
+    @commands.command(
+        help='',
+        brief='',
+        usage='',
+        aliases=[]
+    )
     async def skip(self, ctx):
         if not ctx.voice_client:
             await ctx.send('I\'m not in a VC.')
@@ -190,6 +232,17 @@ class Music(commands.Cog):
 
         ctx.voice_client.stop() # this will trigger the `after` callback in play or the play loop, so the next song starts automatically
         await ctx.send('Skipped the current song.')
+
+    @commands.command(
+        help='',
+        brief='',
+        usage='',
+        aliases=['purge']
+    )
+    async def clear(self, ctx):
+        await ctx.send('Clearing the queue.')
+        queue = self.get_state(ctx.guild.id).queue
+        await queue.purge()
 
     @commands.command(
         help='',
@@ -226,8 +279,6 @@ class Music(commands.Cog):
 
         await ctx.send(f'Volume set to {volume * 100:.0f}%.')
 
-    # TODO: probably need a function to purge the queue. this is surprisingly sucky, given the automatic trigger on _after_playback, might need a "keep dequeueing" semaphore
-    # TODO: probably need a function to stop playback (not pause, like, end song and don't keep going); same issue as above
 
 
 async def setup(bot):
