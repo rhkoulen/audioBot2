@@ -46,6 +46,16 @@ class General(commands.Cog):
                     mappings[cog] = cmd_list
             await ctx.send(embed=embeds.help_all_embed(ctx, mappings))
 
+    @commands.command(
+        aliases=[],
+        hidden=True
+    )
+    async def reload(self, ctx):
+        for ext in list(self.bot.extensions): # for some reason, I can't do the same thing as in main.py. I'm pretty sure pycache is the culprit, but I don't care to tinker more.
+            try:
+                await self.bot.reload_extension(ext)
+            except Exception as e:
+                print(str(e)) # TODO: should I reraise e?
 
 async def setup(bot):
     await bot.add_cog(General(bot))
