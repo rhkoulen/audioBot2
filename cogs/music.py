@@ -23,9 +23,9 @@ class Music(commands.Cog):
         ctx.voice_client.play(source, after=self._after_playback(ctx))
 
     @commands.command(
-        help='',
-        brief='',
-        usage='',
+        help='testing',
+        brief='tester',
+        usage='testage',
         aliases=['join', 'c']
     )
     async def connect(self, ctx):
@@ -247,7 +247,7 @@ class Music(commands.Cog):
     @commands.command(
         help='',
         brief='',
-        usage='',
+        usage='<volume>',
         aliases=[]
     )
     async def volume(self, ctx, volume:float):
@@ -264,9 +264,6 @@ class Music(commands.Cog):
         await ctx.send(f'Volume set to {volume * 100:.0f}%.')
 
     @commands.command(
-        help='',
-        brief='',
-        usage='',
         aliases=[],
         hidden=True # don't let people see this, but it's still funny
     )
