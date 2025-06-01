@@ -25,21 +25,6 @@ def is_in_voice_channel(fail_message:str='I\'m not in a voice channel.'):
 def is_NOT_in_voice_channel(fail_message:str='I\'m already in a voice channel.'):
     return rich_decorator(lambda ctx: ctx.voice_client is None, fail_message)
 
-def is_playing(fail_message:str='I\'m not playing anything.'):
-    return rich_decorator(lambda ctx: ctx.voice_client.is_playing(), fail_message)
-def is_NOT_playing(fail_message:str='I\'m already playing something.'):
-    return rich_decorator(lambda ctx: not ctx.voice_client.is_playing(), fail_message)
-
-def is_paused(fail_message:str='I\'m not paused.'):
-    return rich_decorator(lambda ctx: ctx.voice_client.is_paused(), fail_message)
-def is_NOT_paused(fail_message:str='I\'m already paused.'):
-    return rich_decorator(lambda ctx: not ctx.voice_client.is_paused(), fail_message)
-
-def is_stopped(fail_message:str='Playback is not stopped.'):
-    return rich_decorator(lambda ctx: not ctx.voice_client.is_paused() and not ctx.voice_client.is_playing(), fail_message)
-def is_NOT_stopped(fail_message:str='Playback is stopped.'):
-    return rich_decorator(lambda ctx: ctx.voice_client.is_paused() or ctx.voice_client.is_playing(), fail_message)
-
 def is_guild_msg(fail_message:str='This command only works in servers.'):
     return rich_decorator(lambda ctx: ctx.guild is not None, fail_message)
 def is_NOT_guild_msg(fail_message:str='This command only works in DMs.'):

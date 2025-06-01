@@ -3,8 +3,10 @@ from .validate import is_url
 import os
 import asyncio
 from itertools import count
+from typing import Optional
+from enum import Enum
 
-MUSIC_CACHE = os.path.abspath('music_cache')
+MUSIC_CACHE = os.path.abspath('music_cache') # TODO: should this be updated to have dirs for each guild id?
 GLOBAL_TOKEN_GEN = count(0)
 MAX_TITLE_LENGTH = 128
 
@@ -79,10 +81,16 @@ class SongQueue:
         async with self._lock:
             return [entry.deep_copy() for entry in self._queue]
 
+class SongState(Enum):
+    PLAYING = 0
+    PAUSED = 1
+    STOPPED = 2
+
 class GuildMusicState:
     def __init__(self):
         self.queue = SongQueue()
-        self.current_playback = None # should hold a SongQueueEntry
+        self.playback_state:SongState = SongState.STOPPED
+        self.current_song:Optional[SongQueueEntry] = None
         self.keep_playing_semaphore = True
         self.volume = 0.5
 

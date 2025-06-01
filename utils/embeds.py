@@ -1,4 +1,4 @@
-from .audio import SongQueueEntry
+from .audio import SongQueueEntry, SongState
 from typing import Dict, List
 
 import discord
@@ -20,13 +20,13 @@ def format_secs(seconds:int):
         return f'{seconds // 3600}:{(seconds % 3600) // 60:02}:{seconds % 60:02}'
 
 class QueueEmbed(discord.ui.View):
-    def __init__(self, ctx, song_list, current_song, is_paused, entries_per_page=10):
+    def __init__(self, ctx, song_list, playback_state, current_song, entries_per_page=10):
         assert isinstance(song_list, list)
         super().__init__(timeout=60)
         self.ctx = ctx
         self.song_list = song_list
+        self.playback_state = playback_state
         self.current_song = current_song
-        self.is_paused = is_paused
         self.entries_per_page = entries_per_page
         self.total_pages = (len(song_list) + entries_per_page - 1) // entries_per_page
         self.current_page = 0
@@ -37,7 +37,9 @@ class QueueEmbed(discord.ui.View):
 
         message = ''
         if page_index == 0 and self.current_song != None:
-            if self.is_paused:
+            if self.playback_state == SongState.STOPPED:
+                message += f'⏹️ NOTHING PLAYING ⏹️\n'
+            elif self.playback_state == SongState.PAUSED:
                 message += f'⏸️ PAUSED ⏸️ {format_song(self.current_song)}\n'
             else:
                 message += f'▶️ PLAYING ▶️ {format_song(self.current_song)}\n'

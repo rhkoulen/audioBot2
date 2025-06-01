@@ -1,5 +1,6 @@
 from discord.ext import commands
 from utils import embeds
+from utils.validate import *
 import asyncio
 import discord
 import random
@@ -56,33 +57,27 @@ class General(commands.Cog):
             except Exception as e:
                 print(str(e)) # TODO: should I reraise e?
 
+    @is_guild_msg()
     @commands.command(
-        help='This command spam pings a user. You must specify a user, then optionally specify the frequency in Hz and the duration of spamming.',
+        help='This command spam pings a user. You must specify a user and the duration of spamming in seconds (pings once per second). You can also add on a message for them :)',
         brief='spam pings a user',
-        usage='@<user> <f> <t> (msg)',
+        usage='@<user> <duration> (msg)',
         aliases=['tactical_nuke', 'spam'],
         hidden=True
     )
-    async def nuke(self, ctx, user:discord.Member, frequency:float, duration:int, *, message:str=''):
-        # TODO: more type checking to not break things/max duration
+    async def nuke(self, ctx, user:discord.Member, duration:int, *, message:str=''):
         # TODO: check for user permissions?
-        # TODO: way to turn this off?
-        if frequency <= 0:
-            await ctx.send("Frequency must be positive.")
-            return
         if duration <= 0:
-            await ctx.send("Duration must be positive.")
-            return
+            raise commands.CheckFailure('Duration must be positive.')
+        if duration > 15:
+            raise commands.CheckFailure('That\'s excessive man')
 
-        period = 1.0 / frequency
-        iterations = int(duration * frequency)
-
-        async def loop_task():
-            for i in range(iterations):
+        async def drop_the_nuke():
+            for i in range(duration):
                 await ctx.send(f'{user.mention} {message}')
-                await asyncio.sleep(period)
+                await asyncio.sleep(1)
 
-        self.bot.loop.create_task(loop_task())
+        self.bot.loop.create_task(drop_the_nuke())
 
 async def setup(bot):
     await bot.add_cog(General(bot))
