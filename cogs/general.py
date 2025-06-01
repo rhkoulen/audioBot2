@@ -1,6 +1,6 @@
 from discord.ext import commands
 from utils import embeds
-import config
+import asyncio
 import discord
 import random
 
@@ -55,6 +55,30 @@ class General(commands.Cog):
                 await self.bot.reload_extension(ext)
             except Exception as e:
                 print(str(e)) # TODO: should I reraise e?
+
+    @commands.command(
+        help='This command spam pings a user. You must specify a user, then optionally specify the frequency in Hz and the duration of spamming.',
+        brief='spam pings a user',
+        usage='@<user> <f> <t> (msg)',
+        aliases=['tactical_nuke', 'spam']
+    )
+    async def nuke(self, ctx, user:discord.Member, frequency:float, duration:int, *, message:str=''):
+        if frequency <= 0:
+            await ctx.send("Frequency must be positive.")
+            return
+        if duration <= 0:
+            await ctx.send("Duration must be positive.")
+            return
+
+        period = 1.0 / frequency
+        iterations = int(duration * frequency)
+
+        async def loop_task():
+            for i in range(iterations):
+                await ctx.send(f'{user.mention} {message}')
+                await asyncio.sleep(period)
+
+        self.bot.loop.create_task(loop_task())
 
 async def setup(bot):
     await bot.add_cog(General(bot))
