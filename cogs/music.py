@@ -1,14 +1,15 @@
 from discord.ext import commands
-from utils import audio, embeds
+from utils import audio, embeds, converters
+from utils.validate import *
 
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
 
-# TODO: fill out the help messages in the command decorators
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.guild_states = {} # maps guild id to a queue and other options
 
+    # TODO: add a state to the backend (PLAYING, PAUSED, STOPPED)
     def get_state(self, guild_id) -> audio.GuildMusicState: # basically a defaultdict
         if guild_id not in self.guild_states:
             self.guild_states[guild_id] = audio.GuildMusicState()
@@ -47,28 +48,21 @@ class Music(commands.Cog):
         self.play_song(ctx, next_song)
         await ctx.send(f'Playing {music_state.current_playback.title}.')
 
+    @is_guild_msg()
+    @is_NOT_in_voice_channel() # TODO: figure out how to swap voice channels safely (playing, paused, stopped)
     @commands.command(
-        help='This command causes the bot to set up a voice client in the channel that the user sent it from.',
+        help='This command causes the bot to set up a voice client in the channel that the user sent it from. You may optionally provide an argument. This will attempt to search for that as a case-insensitive substring of any of the voice channel names.',
         brief='joins the sender\'s VC',
-        usage='',
+        usage='(channel name)',
         aliases=['join', 'vc']
     )
-    async def connect(self, ctx):
-        if ctx.author.voice is None: # if the user is not in a channel, connect is tough (TODO: is there a way for me to find a channel if the user specifies a channel name?)
-            await ctx.send('You must be in a voice channel to use this command.')
-            return
-        elif ctx.voice_client is not None:
-            await ctx.send(f'I\'m already in a channel.')
-            # This is probably a bad idea, since it might break things if we swap channels while playing something.
-            #await ctx.send(f'Swapping to: "{ctx.author.voice.channel.name}".')
-            #await ctx.voice_client.disconnect()
-            #await ctx.author.voice.channel.connect()
-            return
-        else:
-            await ctx.send(f'Joining: "{ctx.author.voice.channel.name}".')
-            await ctx.author.voice.channel.connect()
-            return
+    async def connect(self, ctx, *, channel_name:converters.StringToVoiceChannel):
+        await ctx.author.voice.channel.connect()
+        await ctx.send(f'Joined "{ctx.author.voice.channel.name}".')
 
+    @is_guild_msg()
+    @is_in_voice_channel()
+    @is_stopped('I can\'t leave while there\'s still music. Try `stop`.') # TODO: figure out how to leave voice channels safely (playing, paused)
     @commands.command(
         help='This command causes the bot to leave the channel that it\'s currently in.',
         brief='leaves the VC',
@@ -76,14 +70,11 @@ class Music(commands.Cog):
         aliases=['leave', 'dc', 'fuckoff']
     )
     async def disconnect(self, ctx):
-        if ctx.voice_client is None: # if the bot is not in a channel, disconnect has no use
-            await ctx.send('I\'m not in a voice channel.')
-            return
-        else: # bot in a channel, leave the channel
-            await ctx.send('Leaving the VC.')
-            await ctx.voice_client.disconnect() # TODO: this leaves a lot of stuff messy with the guild's music state if something is playing, make this graceful
-            return
+        temp = ctx.voice_client.channel.name
+        await ctx.voice_client.disconnect()
+        await ctx.send(f'Left "{temp}".')
 
+    @is_guild_msg()
     @commands.command(
         help='This command adds the specified song to the queue. You can specific a YT link, a YT music link, a Soundcloud link, a Spotify link (Spotify DRM isn\'t cracked publicly, so it\'ll use metadata to search YT), and many more. Any links supported by yt-dl will be accepted. Anything that is not interpreted as a valid link will be plugged into YT and interpreted as search terms.',
         brief='adds song to queue',
@@ -92,11 +83,12 @@ class Music(commands.Cog):
     )
     async def add(self, ctx, *, search_terms):
         await ctx.send(f'Attempting to download something from that query...')
-        song = await audio.download_from_query(search_terms)
-        await ctx.send(f'Adding {song.title} from {song.uploader} to the queue.')
+        song = await audio.download_from_query(search_terms) # TODO: I have no idea what errors this might produce
         queue = self.get_state(ctx.guild.id).queue
         await queue.enqueue(song)
+        await ctx.send(f'Added {song.title} from {song.uploader} to the queue.')
 
+    @is_guild_msg()
     @commands.command(
         help='This command removes the specified song from the queue. You should use the index as listed on `queue`, which is 1-indexed.',
         brief='removes song from the queue',
@@ -105,12 +97,12 @@ class Music(commands.Cog):
     )
     async def remove(self, ctx, index:int):
         back_index = index - 1 # NOTE: the user-facing queue is 1-indexed
-        try:
-            queue = self.get_state(ctx.guild.id).queue
+        queue = self.get_state(ctx.guild.id).queue
+        if not queue._ind_is_valid(back_index):
+            raise commands.BadArgument(f'Invalid queue index {index} (remember this is 1-indexed).')
+        else:
             await queue.hard_remove(back_index)
             await ctx.send(f'Removed {index} from the queue.')
-        except AssertionError:
-            await ctx.send('Error encountered while removing.')
 
     @commands.command(
         help='This command displays a paginated view of the songs in the queue. There are 10 songs per page with interactive buttons to scroll the pages. Although it is interactive, it isn\'t live. This shows a snapshot of the queue when the user posted the command. If a song ends or a new song is added, the embed will not update.',
@@ -207,7 +199,6 @@ class Music(commands.Cog):
             return
         elif ctx.voice_client.is_paused():
             await ctx.send('I\'m already paused.')
-            ctx.voice_client.resume()
             return
 
         await ctx.send('Stopping playback.')
