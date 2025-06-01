@@ -60,9 +60,13 @@ class General(commands.Cog):
         help='This command spam pings a user. You must specify a user, then optionally specify the frequency in Hz and the duration of spamming.',
         brief='spam pings a user',
         usage='@<user> <f> <t> (msg)',
-        aliases=['tactical_nuke', 'spam']
+        aliases=['tactical_nuke', 'spam'],
+        hidden=True
     )
     async def nuke(self, ctx, user:discord.Member, frequency:float, duration:int, *, message:str=''):
+        # TODO: more type checking to not break things/max duration
+        # TODO: check for user permissions?
+        # TODO: way to turn this off?
         if frequency <= 0:
             await ctx.send("Frequency must be positive.")
             return
