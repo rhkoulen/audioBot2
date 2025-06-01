@@ -22,11 +22,36 @@ class Music(commands.Cog):
         source = PCMVolumeTransformer(source, volume=music_state.volume)
         ctx.voice_client.play(source, after=self._after_playback(ctx))
 
+    # Loopback commands
+    def _after_playback(self, ctx):
+        # this layout is chatGPT'd. I got close, but I couldn't figure out precisely how to use asyncio nonsense; turns out, discord.py has a thread creation native :/ thanks ig
+        def callback(error):
+            if error:
+                print(f"Error during playback: {error}")
+            self.bot.loop.create_task(self._next_song(ctx))
+        return callback
+    async def _next_song(self, ctx):
+        # Remove the finished song
+        music_state = self.get_state(ctx.guild.id)
+        finished_song = music_state.current_playback
+        finished_song.cleanup()
+        music_state.current_playback = None
+
+        if not music_state.keep_playing_semaphore: # stop the playback if signalled to do so (e.g., on stop, purge, etc.)
+            return
+        elif await music_state.queue.length() == 0: # nothing to continue playing
+            await ctx.send('Queue is now empty.')
+            return
+
+        next_song = await music_state.queue.dequeue()
+        self.play_song(ctx, next_song)
+        await ctx.send(f'Playing {music_state.current_playback.title}.')
+
     @commands.command(
-        help='testing',
-        brief='tester',
-        usage='testage',
-        aliases=['join', 'c']
+        help='This command causes the bot to set up a voice client in the channel that the user sent it from.',
+        brief='joins the sender\'s VC',
+        usage='',
+        aliases=['join', 'vc']
     )
     async def connect(self, ctx):
         if ctx.author.voice is None: # if the user is not in a channel, connect is tough (TODO: is there a way for me to find a channel if the user specifies a channel name?)
@@ -45,10 +70,10 @@ class Music(commands.Cog):
             return
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command causes the bot to leave the channel that it\'s currently in.',
+        brief='leaves the VC',
         usage='',
-        aliases=['leave', 'dc']
+        aliases=['leave', 'dc', 'fuckoff']
     )
     async def disconnect(self, ctx):
         if ctx.voice_client is None: # if the bot is not in a channel, disconnect has no use
@@ -60,10 +85,10 @@ class Music(commands.Cog):
             return
 
     @commands.command(
-        help='',
-        brief='',
-        usage='',
-        aliases=['enqueue']
+        help='This command adds the specified song to the queue. You can specific a YT link, a YT music link, a Soundcloud link, a Spotify link (Spotify DRM isn\'t cracked publicly, so it\'ll use metadata to search YT), and many more. Any links supported by yt-dl will be accepted. Anything that is not interpreted as a valid link will be plugged into YT and interpreted as search terms.',
+        brief='adds song to queue',
+        usage='<URL/search terms>',
+        aliases=['enqueue', 'search']
     )
     async def add(self, ctx, *, search_terms):
         await ctx.send(f'Attempting to download something from that query...')
@@ -73,9 +98,9 @@ class Music(commands.Cog):
         await queue.enqueue(song)
 
     @commands.command(
-        help='',
-        brief='',
-        usage='',
+        help='This command removes the specified song from the queue. You should use the index as listed on `queue`, which is 1-indexed.',
+        brief='removes song from the queue',
+        usage='<index>',
         aliases=['dequeue']
     )
     async def remove(self, ctx, index:int):
@@ -88,8 +113,8 @@ class Music(commands.Cog):
             await ctx.send('Error encountered while removing.')
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command displays a paginated view of the songs in the queue. There are 10 songs per page with interactive buttons to scroll the pages. Although it is interactive, it isn\'t live. This shows a snapshot of the queue when the user posted the command. If a song ends or a new song is added, the embed will not update.',
+        brief='shows the queue',
         usage='',
         aliases=['view', 'list']
     )
@@ -120,37 +145,11 @@ class Music(commands.Cog):
         embed = view.format_page(0)
         await ctx.send(embed=embed, view=view)
 
-
-    # Loopback commands
-    # this layout is chatGPT'd. I got close, but I couldn't figure out precisely how to use asyncio nonsense; turns out, discord.py has a thread creation native :/ thanks ig
-    def _after_playback(self, ctx):
-        def callback(error):
-            if error:
-                print(f"Error during playback: {error}")
-            self.bot.loop.create_task(self._next_song(ctx))
-        return callback
-    async def _next_song(self, ctx):
-        # Remove the finished song
-        music_state = self.get_state(ctx.guild.id)
-        finished_song = music_state.current_playback
-        finished_song.cleanup()
-        music_state.current_playback = None
-
-        if not music_state.keep_playing_semaphore: # stop the playback if signalled to do so (e.g., on stop, purge, etc.)
-            return
-        elif await music_state.queue.length() == 0: # nothing to continue playing
-            await ctx.send('Queue is now empty.')
-            return
-
-        next_song = await music_state.queue.dequeue()
-        self.play_song(ctx, next_song)
-        await ctx.send(f'Playing {music_state.current_playback.title}.')
-
     @commands.command(
-        help='',
-        brief='',
+        help='This command starts the playback of songs in the queue.',
+        brief='starts playback',
         usage='',
-        aliases=[]
+        aliases=['start']
     )
     async def play(self, ctx):
         music_state = self.get_state(ctx.guild.id)
@@ -173,8 +172,8 @@ class Music(commands.Cog):
         await ctx.send(f'Playing {music_state.current_playback.title}.')
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command pauses the playback of the current song. This will not skip the song, allowing it to be resumed.',
+        brief='pauses current song',
         usage='',
         aliases=[]
     )
@@ -194,8 +193,8 @@ class Music(commands.Cog):
         ctx.voice_client.pause()
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command stops all playback of the current song. This will skip the song, but playback of the next songs in the queue will not continue',
+        brief='stops all playback',
         usage='',
         aliases=[]
     )
@@ -217,8 +216,8 @@ class Music(commands.Cog):
         ctx.voice_client.stop() # even though this triggers the `after` callback in the play loop, the semaphore makes sure playback stops
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command skips playback of the current song and automatically starts the next song in the queue.',
+        brief='skips over current song',
         usage='',
         aliases=[]
     )
@@ -234,8 +233,8 @@ class Music(commands.Cog):
         await ctx.send('Skipped the current song.')
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command clears the queue. This won\'t affect playback of the current song.',
+        brief='clears the queue',
         usage='',
         aliases=['purge']
     )
@@ -245,8 +244,8 @@ class Music(commands.Cog):
         await queue.purge()
 
     @commands.command(
-        help='',
-        brief='',
+        help='This command adjusts the global volume for your guild. This is set to 0.5 by default, and is saved, but will reset to 0.5 if the bot crashes :/.', # TODO: persistent storage of guild options?
+        brief='adjusts volume',
         usage='<volume>',
         aliases=[]
     )

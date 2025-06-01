@@ -29,7 +29,6 @@ class General(commands.Cog):
         aliases=[]
     )
     async def help(self, ctx, *, command_name:str=None):
-        await ctx.send('AAAAAAAAAAAAAAA')
         if command_name: # help info for a specific command
             command = self.bot.get_command(command_name)
             if (command == None) or command.hidden:
