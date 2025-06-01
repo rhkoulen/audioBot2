@@ -1,5 +1,5 @@
 from discord.ext import commands
-from utils import help
+import discord
 import config
 import asyncio
 
@@ -12,6 +12,7 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     print(f'{bot.user} is online.')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name='>help'))
 
 async def go_cog_mode():
     for cog in config.ACTIVE_COGS:
