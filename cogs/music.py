@@ -4,7 +4,7 @@ from utils.audio import SongState as State
 from utils.validate import *
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
 
-from typing import Dict
+from typing import Dict, Optional
 
 class Music(commands.Cog):
     def __init__(self, bot:commands.Bot):
@@ -126,9 +126,12 @@ class Music(commands.Cog):
         usage='(channel name)',
         aliases=['join', 'vc']
     )
-    async def connect(self, ctx, *, channel_name:converters.StringToVoiceChannel):
-        await ctx.author.voice.channel.connect()
-        await ctx.send(f'Joined "{ctx.author.voice.channel.name}".')
+    async def connect(self, ctx, *, channel_name:Optional[str]=None):
+        converter = converters.StringToVoiceChannel() # unfortunately, converters don't get called if an optional arg isn't supplied, so I can't use it neatly as a type-hinter
+        voice_channel = await converter.convert(ctx, channel_name)
+
+        await voice_channel.connect()
+        await ctx.send(f'Joined "{voice_channel.name}".')
 
     @is_guild_msg()
     @is_in_voice_channel()
