@@ -58,6 +58,7 @@ class General(commands.Cog):
                 print(str(e)) # TODO: should I reraise e?
 
     @is_guild_msg()
+    @commands.is_owner()
     @commands.command(
         help='This command spam pings a user. You must specify a user and the duration of spamming in seconds (pings once per second). You can also add on a message for them :)',
         brief='spam pings a user',
@@ -66,7 +67,6 @@ class General(commands.Cog):
         hidden=True
     )
     async def nuke(self, ctx, user:discord.Member, duration:int, *, message:str=''):
-        # TODO: check for user permissions?
         if duration <= 0:
             raise commands.CheckFailure('Duration must be positive.')
         if duration > 15:

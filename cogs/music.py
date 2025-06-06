@@ -192,7 +192,7 @@ class Music(commands.Cog):
         song_list = await music_state.queue.freeze()
         view = embeds.QueueEmbed(ctx=ctx, song_list=song_list, playback_state=music_state.playback_state, current_song=music_state.current_song)
         embed = view.format_page(0)
-        await ctx.send(embed=embed, view=view, delete_after=60.)
+        await ctx.send(embed=embed, view=view)
 
     @is_guild_msg()
     @is_in_voice_channel()
@@ -280,8 +280,7 @@ class Music(commands.Cog):
     )
     async def volume(self, ctx, volume:float):
         if not 0.0 <= volume <= 1.0:
-            await ctx.send('Volume must be between 0.0 and 1.0.')
-            return
+            raise commands.CheckFailure('Volume must be between 0.0 and 1.0.')
 
         music_state = self.get_state(ctx.guild.id)
         music_state.volume = volume # sets for future songs
@@ -292,6 +291,7 @@ class Music(commands.Cog):
         await ctx.send(f'Volume set to {volume * 100:.0f}%.')
 
     @is_guild_msg()
+    @commands.is_owner()
     @commands.command(
         aliases=[],
         hidden=True # don't let people see this, but it's still funny
