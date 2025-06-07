@@ -113,6 +113,7 @@ class Music(commands.Cog):
             await ctx.send(f'Playing {music_state.current_song.title}.')
 
     @is_guild_msg()
+    @commands.is_owner()
     @commands.command()
     async def debug_guild_state(self, ctx):
         music_state = self.get_state(ctx.guild.id)

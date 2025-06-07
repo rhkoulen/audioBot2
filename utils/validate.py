@@ -2,9 +2,11 @@ from discord.ext import commands
 import discord
 import re
 
-def is_url(search_terms:str):
+def is_valid_url(search_terms:str):
     return re.match(r'^https?://', search_terms)
 
+def is_ig_url(query:str):
+    return re.match(r'(https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/([A-Za-z0-9_-]+)/?)', query)
 
 # Command decorator generator functions
 def rich_decorator(predicate:callable, msg:str):

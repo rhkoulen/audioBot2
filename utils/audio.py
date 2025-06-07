@@ -1,5 +1,5 @@
 from yt_dlp import YoutubeDL
-from .validate import is_url
+from .validate import is_valid_url
 import os
 import asyncio
 from itertools import count
@@ -7,11 +7,11 @@ from typing import Optional
 from enum import Enum
 
 MUSIC_CACHE = os.path.abspath('music_cache') # TODO: should this be updated to have dirs for each guild id?
-GLOBAL_TOKEN_GEN = count(0)
+SONG_TOKEN_GEN = count(0)
 MAX_TITLE_LENGTH = 128
 
 def get_token():
-    return next(GLOBAL_TOKEN_GEN) # I tried making my own, but this is clean and atomic. Shoutout itertools
+    return next(SONG_TOKEN_GEN) # I tried making my own, but this is clean and atomic. Shoutout itertools
 
 class SongQueueEntry:
     def __init__(self, title, uploader, filepath, duration):
@@ -100,8 +100,8 @@ async def download_from_query(query:str) -> SongQueueEntry:
     return await asyncio.to_thread(_download_wrapped, query)
 
 def _download_wrapped(query:str) -> SongQueueEntry:
-    # TODO: how can I speed up rate-limiting? is there a downloader option that lets me multi-connect? will my network card shit itself if I have too many connections?
-    if not is_url(query):
+    # TODO: how can I speed up rate-limiting?
+    if not is_valid_url(query):
         query = f'ytsearch1: {query}'
     ydl_opts = {
         'format': 'bestaudio/best',

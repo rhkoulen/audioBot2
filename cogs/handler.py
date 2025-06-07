@@ -16,6 +16,9 @@ class Handler(commands.Cog):
             commands.NoPrivateMessage,
             commands.DisabledCommand,
             commands.CheckFailure,
+            commands.UserInputError,
+            commands.ExtensionError,
+            commands.ArgumentParsingError,
         )
     # This is probably really bad, but I want it to at least say something.
 
